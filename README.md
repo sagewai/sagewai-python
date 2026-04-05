@@ -110,4 +110,4 @@ Every Sagewai pillar (SDK, Registry, Harness, Observatory, Training) is accessib
 
 AGPL-3.0. See [LICENSE](../../../packages/sagewai/LICENSE).
 
-Built by [Ali Arda Diri](https://sagewai.ai).
+Built by [Ali Arda Diri](https://sagecurator.com)(https://sagewai.ai).
