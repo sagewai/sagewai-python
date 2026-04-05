@@ -103,11 +103,11 @@ Every Sagewai pillar (SDK, Registry, Harness, Observatory, Training) is accessib
 ## Documentation
 
 - [Sagewai Docs](https://docs.sagewai.ai)
-- [OpenAPI Spec](https://github.com/sagewai/sagewai/blob/main/packages/sagewai/openapi/sagewai.yaml)
+- [OpenAPI Spec](https://github.com/sagewai/sagewai/blob/main/openapi/sagewai.yaml)
 - [GitHub](https://github.com/sagewai/sagewai)
 
 ## License
 
-AGPL-3.0. See [LICENSE](../../../packages/sagewai/LICENSE).
+AGPL-3.0. See [LICENSE](https://github.com/sagewai/sagewai/blob/main/LICENSE).
 
 Built by [Ali Arda Diri](https://sagecurator.com)(https://sagewai.ai).
