@@ -69,6 +69,53 @@ client = SagewaiClient(
 The API key is sent as a Bearer token in the Authorization header.
 
 
+## Architecture & security model
+
+This client is a **thin wrapper** over the Sagewai REST API. It does
+not execute workflows itself — it submits enqueue requests to a
+Sagewai control plane and queries run status. The server's worker
+fleet does the actual work.
+
+### Two credential tiers
+
+Sagewai separates credentials into two tiers:
+
+- **Tier-1 (orchestration)** — the LLM key the Sagewai Agent uses
+  for planning and dispatch. Lives on the worker process. Operators
+  manage it with their existing infrastructure. **Clients never see
+  Tier-1 keys.**
+- **Tier-2 (user-task)** — per-customer credentials (Anthropic API
+  keys, GitHub tokens, AWS keys, customer database URLs) that CLI
+  agents and tools use inside the sandbox. **Clients never see
+  Tier-2 plaintext either** — clients only reference Sealed Identity
+  profiles by name (`security_profile_ref`).
+
+Your client code holds the Sagewai server's API key (which
+authenticates it to the control plane) and a list of Sealed Identity
+profile names. It never holds the credentials those profiles contain.
+
+For the full architecture model — five execution modes (0 / 1 / 2 /
+3 / 3b), the trust boundary, audit and revocation primitives — see:
+
+- <https://docs.sagewai.ai/docs/architecture> — user-facing
+- <https://github.com/sagewai/platform/tree/main/docs/architecture> — canonical contract
+
+### Enqueue API surface
+
+A workflow run is enqueued with:
+
+- `input_data` — the workflow input
+- `execution_mode` — Mode 0 (Bare) / 1 (Sandboxed) / 2 (Identity) /
+  3 (Full + CLI agent) / 3b (Full + JIT callback, planned)
+- `security_profile_ref` (optional) — name of the Sealed Identity
+  profile to inject into the sandbox at start
+- `artifact_destination` (optional, Mode 3+) — where CLI agent
+  output goes (GitHub repo, S3 bucket, mounted folder)
+
+This client may not yet expose all of these fields. See the
+[client-libraries tracking issue](https://github.com/sagewai/platform/issues/166)
+for rollout status across all 17 wrapper repos.
+
 ## Pillar Examples
 
 These examples show how a Python developer uses the Sagewai REST API to get deterministic AI agent behavior in their own code.
