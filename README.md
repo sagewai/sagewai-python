@@ -2,37 +2,79 @@
 
 Official Python API client for the [Sagewai](https://sagewai.ai) agent infrastructure platform.
 
-Sagewai's official client libraries exist to make integration seamless for developers in every language. They provide typed interfaces, proper authentication (API key, JWT, OAuth), error handling, and streaming support -- so you can build on Sagewai without needing to work directly with HTTP endpoints.
+This is a **thin RPC wrapper**. It does not execute work — it submits enqueue requests to a Sagewai control plane and queries run status. The worker fleet is the only executor; the wrapper never holds Tier-2 secrets.
 
+> Architecture: see [runtime topology](https://github.com/sagewai/platform/blob/main/docs/architecture/runtime-topology.md), [security tiers](https://github.com/sagewai/platform/blob/main/docs/architecture/security-tiers.md), [execution modes](https://github.com/sagewai/platform/blob/main/docs/architecture/execution-modes.md), [execution backends](https://github.com/sagewai/platform/blob/main/docs/architecture/execution-backends.md). Those docs are the contract.
+
+For the full SDK with agents, memory, workflows, and more, install `sagewai` instead of `sagewai-client`. This package is the thin API client only.
+
+## Security model
+
+Sagewai has two credential tiers (see [security-tiers.md](https://github.com/sagewai/platform/blob/main/docs/architecture/security-tiers.md)). The wrapper sees **neither** in plaintext:
+
+- **Tier 1** — orchestration keys, in worker process env. The wrapper never references these.
+- **Tier 2** — user-task keys (Claude Code, GitHub tokens, AWS), in the sandbox's environment variables only. The wrapper only references Sealed *profile refs* (e.g. `acme-prod`).
+
+`WorkflowRun.effective_env_keys` and `effective_secret_keys` are **names only** — never values.
+
+## Execution modes
+
+Per [execution-modes.md](https://github.com/sagewai/platform/blob/main/docs/architecture/execution-modes.md):
+
+- `BARE` — Mode 0 — pure orchestration on the worker, no sandbox.
+- `SANDBOXED` — Mode 1 — untrusted code, no customer creds.
+- `IDENTITY` — Mode 2 — sandbox + Sealed identity (DB / API / S3 with customer creds).
+- `FULL` — Mode 3 — CLI agent (Claude Code, Codex) + artifact destination.
+- `FULL_JIT` — Mode 3b — Mode 3 + JIT credential callbacks.
+
+The wrapper exposes all five via the `ExecutionMode` enum.
 
 ## Install
 
-```
+```bash
 pip install sagewai-client
 ```
 
 Requires Python 3.10+.
 
-
-## Quick Start
+## Quick Start (Mode 0 — planning)
 
 ```python
-from sagewai_client import SagewaiClient
+from sagewai_client import SagewaiClient, EnqueueRequest, ExecutionMode
 
-client = SagewaiClient(
-    base_url="http://localhost:8100",
-    api_key="sk-harness-...",
-)
+client = SagewaiClient(base_url="http://localhost:8100", api_key="sk-...")
 
-response = client.chat("gpt-4o", "What is Sagewai?")
-print(response.content)
+resp = client.enqueue_run("summarise-brief", EnqueueRequest(
+    input_data={"brief": "Quarterly OKR draft for engineering"},
+    execution_mode=ExecutionMode.BARE,
+))
+print(f"enqueued run {resp.run_id} ({resp.status})")
 ```
 
-For the full SDK with agents, memory, workflows, and more:
+## Mode 3 example — CLI agent (Claude Code building a portfolio site)
 
-```bash
-pip install sagewai
+```python
+from sagewai_client import ArtifactDestination
+
+resp = client.enqueue_run("build-portfolio-site", EnqueueRequest(
+    input_data={"brief": "minimalist Next.js portfolio"},
+    execution_mode=ExecutionMode.FULL,
+    security_profile_ref="customer-acme",
+    artifact_destination=ArtifactDestination(type="github", target="acme/portfolio"),
+))
+print(f"enqueued Mode 3 run {resp.run_id}")
 ```
+
+## Polling for completion
+
+```python
+run = client.get_workflow_run(resp.run_id)
+print(f"status: {run.status} | secret keys (names only): {run.effective_secret_keys}")
+```
+
+## Legacy harness API
+
+Chat / agent registry / spend / token methods still exist on the client unchanged. The reference below documents them, but a few signatures and types in the legacy sections may have drifted from the actual client surface and will be reconciled in a follow-up. The Pillar Examples further down reflect the current API.
 
 ## API Overview
 
@@ -68,53 +110,6 @@ client = SagewaiClient(
 
 The API key is sent as a Bearer token in the Authorization header.
 
-
-## Architecture & security model
-
-This client is a **thin wrapper** over the Sagewai REST API. It does
-not execute workflows itself — it submits enqueue requests to a
-Sagewai control plane and queries run status. The server's worker
-fleet does the actual work.
-
-### Two credential tiers
-
-Sagewai separates credentials into two tiers:
-
-- **Tier-1 (orchestration)** — the LLM key the Sagewai Agent uses
-  for planning and dispatch. Lives on the worker process. Operators
-  manage it with their existing infrastructure. **Clients never see
-  Tier-1 keys.**
-- **Tier-2 (user-task)** — per-customer credentials (Anthropic API
-  keys, GitHub tokens, AWS keys, customer database URLs) that CLI
-  agents and tools use inside the sandbox. **Clients never see
-  Tier-2 plaintext either** — clients only reference Sealed Identity
-  profiles by name (`security_profile_ref`).
-
-Your client code holds the Sagewai server's API key (which
-authenticates it to the control plane) and a list of Sealed Identity
-profile names. It never holds the credentials those profiles contain.
-
-For the full architecture model — five execution modes (0 / 1 / 2 /
-3 / 3b), the trust boundary, audit and revocation primitives — see:
-
-- <https://docs.sagewai.ai/docs/architecture> — user-facing
-- <https://github.com/sagewai/platform/tree/main/docs/architecture> — canonical contract
-
-### Enqueue API surface
-
-A workflow run is enqueued with:
-
-- `input_data` — the workflow input
-- `execution_mode` — Mode 0 (Bare) / 1 (Sandboxed) / 2 (Identity) /
-  3 (Full + CLI agent) / 3b (Full + JIT callback, planned)
-- `security_profile_ref` (optional) — name of the Sealed Identity
-  profile to inject into the sandbox at start
-- `artifact_destination` (optional, Mode 3+) — where CLI agent
-  output goes (GitHub repo, S3 bucket, mounted folder)
-
-This client may not yet expose all of these fields. See the
-[client-libraries tracking issue](https://github.com/sagewai/platform/issues/166)
-for rollout status across all 17 wrapper repos.
 
 ## Pillar Examples
 
